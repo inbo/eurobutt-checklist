@@ -1,20 +1,21 @@
-# National checklists and red lists for prioritising European butterfly conservation actions
+# National checklists and red lists for European butterflies
 
 ## Rationale
 
-This repository contains the functionality to standardize the _National checklists and red lists for prioritising European butterfly conservation actions_ (Maes et al. 2019) to a [Darwin Core checklist](https://www.gbif.org/dataset-classes) that can be harvested by [GBIF](http://www.gbif.org).
+This repository contains the functionality to standardize the _National checklists and red lists for European butterflies_ to a [Darwin Core checklist](https://www.gbif.org/dataset-classes) that can be harvested by [GBIF](http://www.gbif.org).
 
-The repository also includes the script used to calculate the weighted red list categories as used in Maes et al. (2019).
+The repository also includes the script to integrate red lists, calculate weighted red list values, and create the tables and figures for [Maes et al. (2019)](https://doi.org/10.1007/s10841-019-00127-z).
 
 ## Workflow
 
-[source data](data/raw) (maintained as a [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1RvxpOYf2ZrTu9nsTLumoi-G-GGhh6_lV37TNtPiVES4/edit?usp=sharing)) → Darwin Core [mapping script](src/dwc_mapping.Rmd) → generated [Darwin Core files](data/processed)
+[source data](https://github.com/inbo/eurobutt-checklist/tree/master/data/raw) (maintained as a [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1RvxpOYf2ZrTu9nsTLumoi-G-GGhh6_lV37TNtPiVES4/edit?usp=sharing)) → Darwin Core [mapping script](https://inbo.github.io/eurobutt-checklist/dwc_mapping.html) → generated [Darwin Core files](https://github.com/inbo/eurobutt-checklist/tree/master/data/processed)
 
-[source data](data/raw) → [script](src/wrl_values.Rmd) to calculate weighted red list values → [weighted red list values table](data/processed/wrl_values.csv)
+[source data](https://github.com/inbo/eurobutt-checklist/tree/master/data/raw) → [analysis script](https://inbo.github.io/eurobutt-checklist/integrating_rl.html) → [tables and figures for Maes et al. (2019)](https://github.com/inbo/eurobutt-checklist/tree/master/reports)
 
 ## Published dataset
 
-...
+* [Dataset on the IPT](https://ipt.inbo.be/resource?r=eurobutt-checklist)
+* [Dataset on GBIF](https://doi.org/10.15468/ye7whj)
 
 ## Repo structure
 
@@ -28,15 +29,16 @@ The repository structure is based on [Cookiecutter Data Science](http://drivenda
 │
 ├── data
 │   ├── raw                : Source data from Google Spreadsheet, input for scripts GENERATED
-│   └── processed
-│       ├── *.csv          : Darwin Core output of mapping script GENERATED
-│       └── wrl_values.csv : Output of weighted red list values script
+│   ├── interim            : Interim data created for analysis GENERATED
+│   └── processed          : Darwin Core output of mapping script GENERATED
 │
 ├── docs                   : Repository website GENERATED
 │
+├── reports                : Figures and tables as output of analysis GENERATED
+│
 └── src
     ├── dwc_mapping.Rmd    : Darwin Core mapping script
-    ├── wrl_values.Rmd     : Script to dynamically calculate weighted red list values
+    ├── integrating_rl.Rmd : Analysis script to integrate red lists
     ├── _site.yml          : Settings to build website in docs/
     └── index.Rmd          : Template for website homepage
 ```

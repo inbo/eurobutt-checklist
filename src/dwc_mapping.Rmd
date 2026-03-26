@@ -1,6 +1,6 @@
 ---
 title: "Darwin Core mapping"
-subtitle: "For: National checklists and red lists for prioritising European butterfly conservation actions"
+subtitle: "For: National checklists and red lists for European butterflies"
 author:
 - Peter Desmet
 - Dimitri Brosens
@@ -16,8 +16,6 @@ output:
 
 This document describes how we map the checklist data to Darwin Core. The source file for this document can be found [here](https://github.com/inbo/eurobutt-checklist/blob/master/src/dwc_mapping.Rmd).
 
-# Setup
-
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
@@ -31,36 +29,44 @@ library(magrittr)       # To use %<>% pipes
 library(here)           # To find files
 library(janitor)        # To clean input data
 library(digest)         # To generate hashes
-library(rgbif)          # To use GBIF services
 ```
 
 # Read source data
 
-The original spreadsheet can be found [here](https://docs.google.com/spreadsheets/d/1RvxpOYf2ZrTu9nsTLumoi-G-GGhh6_lV37TNtPiVES4/edit?usp=sharing).
+The source data is maintained in [this Google Spreadsheet](https://docs.google.com/spreadsheets/d/1RvxpOYf2ZrTu9nsTLumoi-G-GGhh6_lV37TNtPiVES4/edit?usp=sharing).
 
-Read the relevant worksheets:
+Read the relevant worksheets (published as csv):
 
 ```{r}
 input_distribution <- read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vSrKN8_XbQ4Vo-VrtUiqAtS5im3QxkHBNSJHPSLmrkM5C1PIC7DOg-oboRcEJZtWp_qsi802YRlRp8C/pub?gid=979140000&single=true&output=csv")
 input_taxa <- read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vSrKN8_XbQ4Vo-VrtUiqAtS5im3QxkHBNSJHPSLmrkM5C1PIC7DOg-oboRcEJZtWp_qsi802YRlRp8C/pub?gid=1559651428&single=true&output=csv")
 input_regions <- read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vSrKN8_XbQ4Vo-VrtUiqAtS5im3QxkHBNSJHPSLmrkM5C1PIC7DOg-oboRcEJZtWp_qsi802YRlRp8C/pub?gid=2076261682&single=true&output=csv")
 input_references <- read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vSrKN8_XbQ4Vo-VrtUiqAtS5im3QxkHBNSJHPSLmrkM5C1PIC7DOg-oboRcEJZtWp_qsi802YRlRp8C/pub?gid=1083424499&single=true&output=csv")
-input_rlc <- read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vSrKN8_XbQ4Vo-VrtUiqAtS5im3QxkHBNSJHPSLmrkM5C1PIC7DOg-oboRcEJZtWp_qsi802YRlRp8C/pub?gid=1579699417&single=true&output=csv")
 ```
 
-Copy the source data to the repository:
+Sort the source files (to maintain some consistency between updates of the dataset):
+
+```{r}
+input_distribution %<>% arrange(scientific_name, region_code)
+input_taxa %<>% arrange(scientific_name)
+input_regions %<>% arrange(region_code)
+input_references %<>% arrange(region_code, citation)
+```
+
+Copy the source data to the repository to keep track of changes:
 
 ```{r}
 write_csv(input_distribution, here("data", "raw", "distribution.csv"), na = "")
 write_csv(input_taxa, here("data", "raw", "taxa.csv"), na = "")
 write_csv(input_regions, here("data", "raw", "regions.csv"), na = "")
 write_csv(input_references, here("data", "raw", "references.csv"), na = "")
-write_csv(input_rlc, here("data", "raw", "rlc.csv"), na = "")
 ```
 
 The first 4 files will be used for the Darwin Core mapping, while `rlc` is needed for the calculation in `wrl_values.Rmd`.
 
-# Process source data
+# Preprocessing
+
+## Join spreadsheets
 
 The `input_references` contain references of species/red lists per region. We can include those as `source` for distributions, but unfortunately not as full references in a [reference extension](http://rs.gbif.org/extension/gbif/1.0/references.xml), as that would require them to be associated (and repeated) with taxa.
 
@@ -84,6 +90,10 @@ input_data <-
   left_join(grouped_references, on = "region_code")
 ```
 
+```{r}
+nrow(input_data) == nrow(input_distribution)
+```
+
 ## Tidy data
 
 Clean data somewhat:
@@ -94,7 +104,7 @@ input_data %<>%
   clean_names()               # Have sensible (lowercase) column names
 ```
 
-Sort on scientific name and country code (to maintain some consistency between updates of the dataset):
+Sort on scientific name and region code (to maintain some consistency between updates of the dataset):
 
 ```{r}
 input_data %<>% arrange(scientific_name, region_code)
@@ -102,7 +112,22 @@ input_data %<>% arrange(scientific_name, region_code)
 
 ## Scientific names
 
-No cleaning required.
+Information regarding scientific names, authorship, classification and phylogenetic order in `input_taxa` is derived from [Wiemers et al. (2018)](https://doi.org/10.3897/zookeys.811.28712), which is an "updated checklist of the European Butterflies" with 496 species.
+
+All names on the regional checklists (`scientific_name_regional` in `input_distribution`) were matched by Dimitri Brosens to their accepted name (`scientific_name`) using the [GBIF Backbone Taxonomy](https://doi.org/10.15468/39omei) and verified by Dirk Maes (e.g. `Lycaeides argyrognomon` to official `Plebejus argyrognomon`). A limited number of `scientific_name_regional` could not be matched and/or are not accepted by Wiemers et al. (2018):
+
+```{r}
+input_data %>%
+  filter(is.na(family)) %>% # Is a field from input_taxa and thus assesses there was a match
+  select(scientific_name_regional, scientific_name, region_code, comments) %>%
+  arrange(scientific_name_regional)
+```
+
+We **restrict the checklist to scientific names included in Wiemers et al. (2018)** (i.e. those included in `input_taxa`, see [issue 16](https://github.com/inbo/eurobutt-checklist/issues/16)):
+
+```{r}
+input_data %<>% filter(!is.na(family)) # Remove distributions/names without match
+```
 
 ## Taxon IDs
 
@@ -138,133 +163,133 @@ Preview data:
 input_data %>% head()
 ```
 
-# Taxon core
+# Darwin Core mapping
 
-## Pre-processing
+## Taxon core
 
-Create a dataframe with unique taxa only (ignoring multiple distribution rows):
+Create a dataframe with unique taxa only (retaining the first of multiple distribution rows):
 
 ```{r start_taxon}
-taxon <- input_data %>% distinct(input_taxon_id, .keep_all = TRUE)
+taxon <- input_data %>% distinct(taxon_id, .keep_all = TRUE)
 ```
 
-### Term mapping
-
-Map the data to [Darwin Core Taxon](http://rs.gbif.org/core/dwc_taxon_2015-04-24.xml).
+Map the data to [Darwin Core Taxon](http://rs.gbif.org/core/dwc_taxon_2015-04-24.xml):
  
 ### language
 
 ```{r}
-taxon %<>% mutate(language = "en")
+taxon %<>% mutate(dwc_language = "en")
 ```
 
 ### license
 
 ```{r}
-taxon %<>% mutate(license = "http://creativecommons.org/publicdomain/zero/1.0/")
+taxon %<>% mutate(dwc_license = "http://creativecommons.org/publicdomain/zero/1.0/")
 ```
 
 ### rightsHolder
 
 ```{r}
-taxon %<>% mutate(rightsHolder = "INBO")
+taxon %<>% mutate(dwc_rightsHolder = "INBO")
 ```
 
 ### accessRights
 
 ```{r}
-taxon %<>% mutate(accessRights = "https://www.inbo.be/en/norms-data-use")
+taxon %<>% mutate(dwc_accessRights = "https://www.inbo.be/en/norms-data-use")
 ```
 
 ### datasetID
 
 ```{r}
-taxon  %<>% mutate(datasetID = "to_be_completed")
+taxon  %<>% mutate(dwc_datasetID = "https://doi.org/10.15468/ye7whj")
 ```
 
 ### institutionCode
 
 ```{r}
-taxon %<>% mutate(institutionCode = "INBO")
+taxon %<>% mutate(dwc_institutionCode = "INBO")
 ```
 
 ### datasetName
 
 ```{r}
-taxon %<>% mutate(datasetName = "National checklists and red lists for prioritising European butterfly conservation actions")
+taxon %<>% mutate(dwc_datasetName = "National checklists and red lists for European butterflies")
 ```
 
 ### taxonID
 
 ```{r}
-taxon %<>% mutate(taxonID = input_taxon_id)
+taxon %<>% mutate(dwc_taxonID = taxon_id)
 ```
 
 ### scientificName
 
 ```{r}
-taxon %<>% mutate(scientificName = input_speciesname_europe)
+taxon %<>% mutate(dwc_scientificName = scientific_name)
 ```
 
 ### kingdom
 
 ```{r}
-taxon %<>% mutate(kingdom = "Animalia")
+taxon %<>% mutate(dwc_kingdom = "Animalia")
 ```
 
 ### phylum
 
 ```{r}
-taxon %<>% mutate(phylum = "Arthropoda")
+taxon %<>% mutate(dwc_phylum = "Arthropoda")
 ```
 
 ### class
 
 ```{r}
-taxon %<>% mutate(class = "Insecta")
+taxon %<>% mutate(dwc_class = "Insecta")
 ```
 
 ### order
 
 ```{r}
-taxon %<>% mutate(order= "Lepidoptera")
+taxon %<>% mutate(dwc_order = "Lepidoptera")
+```
+
+### family
+
+```{r}
+taxon %<>% mutate(dwc_family = family)
+```
+
+### genus
+
+```{r}
+taxon %<>% mutate(dwc_genus = genus)
+```
+
+### specificEpithet
+
+```{r}
+taxon %<>% mutate(dwc_specificEpithet = specific_epithet)
 ```
 
 ### taxonRank
 
 ```{r}
-taxon %<>% mutate(taxonRank = "species")
+taxon %<>% mutate(dwc_taxonRank = "species")
+```
+
+### scientificNameAuthorship
+
+```{r}
+taxon %<>% mutate(dwc_scientificNameAuthorship = authorship)
 ```
 
 ### nomenclaturalCode
 
 ```{r}
-taxon %<>% mutate(nomenclaturalCode = "ICZN")
+taxon %<>% mutate(dwc_nomenclaturalCode = "ICZN")
 ```
 
-## Post-processing
-
-Remove the original columns:
-
-```{r}
-taxon %<>% select(-starts_with("input_"))
-```
-
-Preview data:
-
-```{r}
-taxon %>% head()
-```
-
-Save to CSV:
-
-```{r}
-write_csv(taxon, here("data", "processed", "taxon.csv"), na = "")
-```
-
-# Distribution extension
-
-## Pre-processing
+## Distribution extension
 
 Create a dataframe with all data:
 
@@ -272,71 +297,94 @@ Create a dataframe with all data:
 distribution <- input_data
 ```
 
-## Term mapping
-
-Map the data to [Species Distribution](http://rs.gbif.org/extension/gbif/1.0/distribution.xml).
+Map the data to [Species Distribution](http://rs.gbif.org/extension/gbif/1.0/distribution.xml):
 
 ### taxonID
 
 ```{r}
-distribution %<>% mutate(taxonID = input_taxon_id) 
+distribution %<>% mutate(dwc_taxonID = taxon_id) 
+```
+
+### locationID
+
+Map values:
+
+```{r}
+distribution %<>% mutate(dwc_locationID = case_when(
+  # Europe: not WGSRPD:1 as that does not include Azores and Canary islands
+  # https://en.wikipedia.org/wiki/World_Geographical_Scheme_for_Recording_Plant_Distributions#1_Europe
+  region_code == "EUR" ~ "",
+  
+  # European union: EU is reserved, but not an official ISO code
+  # https://en.wikipedia.org/wiki/ISO_3166-1#Criteria_for_inclusion
+  region_code == "EU27" ~ "",
+  
+  # Azores, Canary Islands, Madeira: use marine regions codes
+  # The island groups have ISO_3166-2 subdivisions codes, but for consistency we use marine regions for all
+  region_code == "MA_AZ" ~ "http://marineregions.org/mrgid/2454", # ISO_3166:PT-20
+  region_code == "MA_AZ_Corvo" ~ "http://marineregions.org/mrgid/2462",
+  region_code == "MA_AZ_Faial" ~ "http://marineregions.org/mrgid/2458",
+  region_code == "MA_AZ_Flores" ~ "http://marineregions.org/mrgid/2461",
+  region_code == "MA_AZ_Graciosa" ~ "http://marineregions.org/mrgid/2463",
+  region_code == "MA_AZ_Pico" ~ "http://marineregions.org/mrgid/2460",
+  region_code == "MA_AZ_Santa Maria" ~ "http://marineregions.org/mrgid/2459",
+  region_code == "MA_AZ_Sao Jorge" ~ "http://marineregions.org/mrgid/2455",
+  region_code == "MA_AZ_Sao Miguel" ~ "http://marineregions.org/mrgid/2456",
+  region_code == "MA_AZ_Terceira" ~ "http://marineregions.org/mrgid/2457",
+  
+  region_code == "MA_CA" ~ "http://marineregions.org/mrgid/3743", # ISO_3166:ES-CN
+  region_code == "MA_CA_El Hierro" ~ "http://marineregions.org/mrgid/3747",
+  region_code == "MA_CA_Fuerteventura" ~ "http://marineregions.org/mrgid/3757",
+  region_code == "MA_CA_Gran Canaria" ~ "http://marineregions.org/mrgid/3746",
+  region_code == "MA_CA_La Gomera" ~ "http://marineregions.org/mrgid/3744",
+  region_code == "MA_CA_La Palma" ~ "http://marineregions.org/mrgid/3748",
+  region_code == "MA_CA_Lanzarote" ~ "http://marineregions.org/mrgid/3755",
+  region_code == "MA_CA_Tenerife" ~ "http://marineregions.org/mrgid/3756",
+
+  region_code == "MA_MA" ~ "http://marineregions.org/mrgid/4955", # ISO_3166:PT-30
+  region_code == "MA_MA_Madeira" ~ "http://marineregions.org/mrgid/4956",
+  region_code == "MA_MA_Porto Santo" ~ "http://marineregions.org/mrgid/4958",
+  
+  # All other countries: ISO_3166 code
+  is.na(region_name) ~ paste0("ISO_3166:", region_code)
+))
 ```
 
 ### locality
 
-Inspect values:
-
-```{r}
-distribution %>%
-  group_by(input_country_code, input_country) %>%
-  count()
-```
-
 Map values:
 
 ```{r}
-distribution %<>% mutate(locality = recode(input_country,
-  Macaronesia_Azores = "Azores",
-  Macaronesia_CanaryIslands = "Canary Islands",
-  Macaronesia_MadeiraIslands = "Madeira"
+distribution %<>% mutate(dwc_locality = case_when(
+  # Use country name if not a region  
+  is.na(region_name) ~ country_name,
+  
+  # Use e.g. "Azores, Corvo" for island groups
+  str_detect(region_code, "MA_AZ_") ~ paste("Azores", region_name, sep = ", "),
+  str_detect(region_code, "MA_MA_") ~ paste("Madeira", region_name, sep = ", "),
+  str_detect(region_code, "MA_CA_") ~ paste("Canary Islands", region_name, sep = ", "),
+  
+  # Use region name for rest
+  TRUE ~ region_name
 ))
-```
-
-Inspect mapped values: 
-
-```{r}
-distribution %>%
-  filter(input_country != locality) %>%
-  group_by(input_country, locality) %>%
-  count()
 ```
 
 ### countryCode
 
-Inspect values:
-
-```{r}
-distribution %>%
-  group_by(input_country_code) %>%
-  count()
-```
-
 Map values:
 
 ```{r}
-distribution %<>% mutate(countryCode = recode(input_country_code,
-  MA_AZ = "PT", # Azores -> Portugal
-  MA_CA = "SP", # Canary Islands -> Spain
-  MA_MA = "PT" # Madeira -> Portugal
-))
+distribution %<>% mutate(dwc_countryCode = country_code)
 ```
 
 Inspect mapped values: 
 
 ```{r}
 distribution %>%
-  filter(input_country_code != countryCode) %>%
-  group_by(input_country_code, countryCode) %>%
+  group_by(
+    region_code, region_name, country_code, country_name,
+    dwc_locationID, dwc_locality, dwc_countryCode
+  ) %>%
   count()
 ```
 
@@ -346,17 +394,22 @@ Inspect values:
 
 ```{r}
 distribution %>%
-  group_by(input_status) %>%
+  group_by(status) %>%
   count()
 ```
 
-Map values:
+Map values (see [Wiemers et al. 2018](https://doi.org/10.3897/zookeys.811.28712), Materials & Methods). For migrants we decided to map to own term `migrant` as this information is too important to be lumped into `irregular` (with alternative term `vagrant`) and cannot be considered just `present` or `absent` (see  issue [#18](https://github.com/inbo/eurobutt-checklist/issues/18)).
 
 ```{r}
-distribution %<>% mutate(occurrenceStatus = recode(input_status,
-  Ex = "absent",
-  M = "absent", # Regular migrant, decided to use "absent" rather than "irregular" or "present"
-  P = "present",
+distribution %<>% mutate(dwc_occurrenceStatus = recode(status,
+  "A" = "absent",
+  "Ex" = "absent", # Regionally extinct, is indicated in threatStatus "RE"
+  "Excluded" = "excluded",
+  "I" = "irregular", # Irregular vagrant
+  "M" = "migrant", # Regular migrant
+  "P" = "present",
+  "P?" = "doubtful", # Possibly present
+  "P(I)" = "irregular", # Probably only present as an immigrant
   .default = ""
 ))
 ```
@@ -365,7 +418,7 @@ Inspect mapped values:
 
 ```{r}
 distribution %>%
-  group_by(input_status, occurrenceStatus) %>%
+  group_by(status, dwc_occurrenceStatus) %>%
   count()
 ```
 
@@ -375,26 +428,31 @@ Inspect values:
 
 ```{r}
 distribution %>%
-  group_by(input_red_list_category) %>%
+  group_by(rlc) %>%
   count()
 ```
 
 Map values:
 
 ```{r}
-distribution %<>% mutate(threatStatus = recode(input_red_list_category,
-  CR = "CR", # Critically Endangered
-  DD = "DD", # Data Deficient
-  EN = "EN", # Endangered
-  LC = "LC", # Least Concern
-  NE = "NE", # Not Evaluated
-  "No Red List available" = "",
-  NT = "NT", # Near Threatened
-  NtA = "NA", # Not Applicable
-  R = "Rare", # not an official IUCN term, but used by Germany
-  RE = "RE", # Regionally Extinct
-  Unknown = "unknown", # not an official IUCN term, but opted to be explicit
-  VU = "VU", # Vulnerable
+distribution %<>% mutate(dwc_threatStatus = recode(rlc,
+  # Official IUCN terms: https://www.iucnredlist.org/about/regional
+
+  "RE" = "RE", # Regionally Extinct
+  "CR" = "CR", # Critically Endangered
+  "EN" = "EN", # Endangered
+  "VU" = "VU", # Vulnerable
+  "NT" = "NT", # Near Threatened
+  "LC" = "LC", # Least Concern
+  "DD" = "DD", # Data Deficient
+  "NtA" = "NA", # Not Applicable
+  "NE" = "NE", # Not Evaluated
+  
+  # Unofficial terms
+  "NRLA" = "", # No red list available
+  "R" = "Rare", # Used by Germany
+  "Unknown" = "unknown", # not an official IUCN term, but included to be explicit
+  "LC/NE" = "NE", # Used by Poland
   .default = ""
 ))
 ```
@@ -403,53 +461,98 @@ Inspect mapped values:
 
 ```{r}
 distribution %>%
-  group_by(input_red_list_category, threatStatus) %>%
+  group_by(rlc, dwc_threatStatus) %>%
   count()
 ```
 
 ### source
 
-Inspect values:
-
 ```{r}
-distribution %>%
-  group_by(input_reference_species_list, input_reference_red_list) %>%
-  count()
+distribution %<>% mutate(dwc_source = reference)
 ```
 
-Combine the references `input_reference_species_list` and `input_reference_red_list`, ignoring `NA` and using ` | ` as separator:
+### occurrenceRemarks
 
 ```{r}
-distribution %<>%
-  mutate(source = paste(input_reference_species_list, input_reference_red_list, sep = "; ")) %>%
-  mutate(source = str_replace(source, "; NA", "")) %>% # Replace paste() output for NA values
-  mutate(source = str_replace(source, "; ", " | "))
+distribution %<>% mutate(dwc_occurrenceRemarks = case_when(
+  scientific_name_regional != scientific_name ~ paste0("In source as '", scientific_name_regional, "'")
+))
 ```
 
-Inspect mapped values: 
+# Vernacular names extension
+
+Create a dataframe with unique taxa only (retaining the first of multiple distribution rows):
+
+```{r start_vernacular_names}
+vernacular_names <- input_data %>% distinct(taxon_id, .keep_all = TRUE)
+```
+
+Remove taxa where the vernacular name contains "suggestion":
 
 ```{r}
-distribution %>%
-  group_by(input_reference_species_list, input_reference_red_list, source) %>%
-  count()
+vernacular_names %<>% filter(!str_detect(english_name, "suggestion"))
 ```
 
-## Post-processing
+Map the data to [Vernacular Names](http://rs.gbif.org/extension/gbif/1.0/vernacularname.xml):
 
-Remove the original columns:
+### taxonID
 
 ```{r}
-distribution %<>% select(-starts_with("input_"))
+vernacular_names %<>% mutate(dwc_taxonID = taxon_id) 
 ```
 
-Preview data:
+### vernacularName
+
+```{r}
+vernacular_names %<>% mutate(dwc_vernacularName = english_name)
+```
+
+### language
+
+```{r}
+vernacular_names %<>% mutate(dwc_language = "en") 
+```
+
+# Post-processing
+
+Only keep the Darwin Core columns:
+
+```{r}
+taxon %<>% select(starts_with("dwc_"))
+distribution %<>% select(starts_with("dwc_"))
+vernacular_names %<>% select(starts_with("dwc_"))
+```
+
+Drop the `dwc_` prefix:
+
+```{r}
+colnames(taxon) <- str_remove(colnames(taxon), "dwc_")
+colnames(distribution) <- str_remove(colnames(distribution), "dwc_")
+colnames(vernacular_names) <- str_remove(colnames(vernacular_names), "dwc_")
+```
+
+Preview taxon core:
+
+```{r}
+taxon %>% head()
+```
+
+Preview distribution extension:
 
 ```{r}
 distribution %>% head()
 ```
 
+Preview vernacular names extension:
+
+```{r}
+vernacular_names %>% head()
+```
+
 Save to CSV:
 
 ```{r}
+write_csv(taxon, here("data", "processed", "taxon.csv"), na = "")
 write_csv(distribution, here("data", "processed", "distribution.csv"), na = "")
+write_csv(vernacular_names, here("data", "processed", "vernacularname.csv"), na = "")
 ```
