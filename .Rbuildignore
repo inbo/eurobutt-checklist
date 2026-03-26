@@ -1,0 +1,27 @@
+# Git and version control
+^\.git/
+^\.github/
+\.gitignore
+
+# RStudio and IDE
+^\.Rproj\.user/
+\.Rproj$
+^\.RData$
+^\.Rhistory$
+^\.RProfile$
+
+# Development files
+^IMPROVEMENTS_SUMMARY\.md$
+^SETUP\.md$
+README\.md
+LICENSE
+
+# Data (already processed)
+^data/
+^images/
+
+# Rendered output
+^src/.*\.html$
+^src/.*\.pdf$
+^\docs/
+^_site/

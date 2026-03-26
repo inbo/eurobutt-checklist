@@ -43,14 +43,71 @@ The repository structure is based on [Cookiecutter Data Science](http://drivenda
     └── index.Rmd          : Template for website homepage
 ```
 
-## Installation
+## Getting Started
 
-1. Clone this repository to your computer
-2. Open the RStudio project file
-3. Open the `dwc_mapping.Rmd` [R Markdown file](https://rmarkdown.rstudio.com/) in RStudio
-4. Install any required packages
-5. Click `Run > Run All` to generate the processed data
-6. Alternatively, click `Build > Build website` to generate the processed data and build the website in `docs/`
+### Quick Start
+1. Clone this repository: `git clone https://github.com/inbo/eurobutt-checklist.git`
+2. Open `eurobutt-checklist.Rproj` in RStudio
+3. Read [SETUP.md](./SETUP.md) for detailed installation instructions
+4. Run `remotes::install_deps()` to install all dependencies
+5. Open `src/dwc_mapping.Rmd` and click **Run All** to generate outputs
+
+### Documentation
+
+- **[SETUP.md](./SETUP.md)** - Development environment setup and OAuth authentication
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - Contribution guidelines and development workflow
+- **[IMPROVEMENTS_SUMMARY.md](./IMPROVEMENTS_SUMMARY.md)** - Recent structural improvements
+
+### Data Sync
+
+To update raw data from Google Sheets:
+```r
+source("src/sync_data.R")
+```
+
+Or use the automated workflow that runs daily.
+
+### Scripts
+
+| Script | Purpose | Output |
+|--------|---------|--------|
+| `src/dwc_mapping.Rmd` | Transform to Darwin Core format | `data/processed/*.csv` |
+| `src/wrl_values.Rmd` | Calculate weighted red list values | `data/processed/wrl_values_*.csv` |
+| `src/sync_data.R` | Sync data from Google Sheets | `data/raw/*.csv` |
+
+## Automation
+
+This repository includes **GitHub Actions** for automated workflows:
+- **Daily data sync** at 2 AM UTC
+- **Automatic output rendering** on push/PR
+- **Data validation** on all commits
+
+See [GITHUB_ACTIONS_SETUP.md](./GITHUB_ACTIONS_SETUP.md) to set up the workflow.
+
+## Project Structure
+
+```
+├── README.md                  : This file
+├── SETUP.md                   : Setup instructions
+├── CONTRIBUTING.md            : Contribution guidelines
+├── DESCRIPTION                : R package dependencies
+├── eurobutt-checklist.Rproj   : RStudio project file
+│
+├── src/
+│   ├── dwc_mapping.Rmd       : Darwin Core mapping script
+│   ├── wrl_values.Rmd        : Weighted red list calculation
+│   ├── sync_data.R           : Google Sheets data sync
+│   ├── utils.R               : Shared utility functions
+│   ├── _site.yml             : Website config
+│   └── index.Rmd             : Website template
+│
+├── data/
+│   ├── raw/                  : Source data from Google Sheets
+│   ├── interim/              : Intermediate calculations
+│   └── processed/            : Final Darwin Core outputs
+│
+└── images/                    : Generated visualizations
+```
 
 ## Contributors
 
